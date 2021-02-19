@@ -1,9 +1,15 @@
 #!/system/bin/sh
 
-# 双服务器代理模式(gfw,cn)
+# 双服务器代理模式 gfw/cn
 # gfw 国外服务器代理gfwlist,其他使用国内服务器
 # cn  国内服务器代理geoip:cn,geosite:cn,其他使用国外服务器
 proxy_mode="cn"
+
+# 域名解析 on/off
+# on  生成配置文件时,会先将域名解析成ip
+# off 配置文件中直接用域名,不解析成ip
+# xray重新编译了,自己替换的不一定支持直接使用域名
+domain_lookup="on"
 
 # 流量探测 true/false
 sniffing="false"
@@ -147,8 +153,10 @@ tcpHttpSettingsObj=',
         }'
 fi
 
-get_ip 2>&-
-[ -z "$ip" ] && return 111
+if [ "$domain_lookup" = "on" ]; then
+  get_ip 2>&-
+  [ -z "$ip" ] && return 111
+fi
 
 echo "${2}file"=$3 >> bin/info
 echo "${2}addr"=$addr >> bin/info
@@ -224,7 +232,13 @@ echo "\"dns\": {
           \"geosite:cn\"
         ]
       },
-      \"$DNS2\"
+      {
+        \"address\": \"$DNS2\",
+        \"port\": 53,
+        \"domains\": [
+          \"geosite:geolocation-!cn\"
+        ]
+      }
     ]
   }"
 else
@@ -243,24 +257,23 @@ if [ "$proxy_mode" = "cn" ]; then
 echo ",
       {
         \"type\": \"field\",
-        \"outboundTag\": \"proxy\",
-        \"domain\": [\"geosite:cn\"]
+        \"domain\": [\"geosite:cn\"],
+        \"outboundTag\": \"proxy\"
       },
       {
         \"type\": \"field\",
-        \"outboundTag\": \"proxy\",
-        \"ip\": [\"geoip:cn\"]
+        \"ip\": [\"geoip:cn\"],
+        \"outboundTag\": \"proxy\"
       }"
 else
 echo ",
       {
         \"type\": \"field\",
-        \"outboundTag\": \"PROXY2\",
-        \"domain\": [\"geosite:geolocation-!cn\"]
+        \"domain\": [\"geosite:geolocation-!cn\"],
+        \"outboundTag\": \"PROXY2\"
       },
       {
         \"type\": \"field\",
-        \"outboundTag\": \"PROXY2\",
         \"ip\": [
           \"149.154.167.99/32\",
           \"149.154.175.10/32\",
@@ -307,11 +320,11 @@ echo ",
           \"2001:b28:f23d::/48\",
           \"2001:b28:f23f::/48\",
           \"2001:67c:4e8::/48\"
-        ]
+        ],
+        \"outboundTag\": \"PROXY2\"
       },
       {
         \"type\": \"field\",
-        \"outboundTag\": \"PROXY2\",
         \"ip\": [
           \"geoip:ae\",
           \"geoip:au\",
@@ -347,7 +360,8 @@ echo ",
           \"geoip:tw\",
           \"geoip:us\",
           \"geoip:vn\"
-        ]
+        ],
+        \"outboundTag\": \"PROXY2\"
       }"
 fi
 fi
@@ -358,7 +372,6 @@ breakBqRuleObj=',
       {
         "type": "field",
         "network": "tcp",
-        "outboundTag": "direct",
         "domain": [
           "video.qq.com",
           "cache.video.iqiyi.com",
@@ -369,7 +382,8 @@ breakBqRuleObj=',
           "pcweb2.api.mgtv.com",
           "interface3.music.163.com",
           "guide-acs.m.taobao.com"
-        ]
+        ],
+        "outboundTag": "direct"
       }'
 fi
 
@@ -394,15 +408,15 @@ echo "{
   ],
   \"outbounds\": [$outboundsObj
     {
+      \"tag\": \"direct\",
       \"protocol\": \"freedom\",
       \"settings\": {
         \"domainStrategy\": \"UseIP\"
-      },
-      \"tag\": \"direct\"
+      }
     },
     {
-      \"protocol\": \"dns\",
-      \"tag\": \"dns-out\"
+      \"tag\": \"dns-out\",
+      \"protocol\": \"dns\"
     }
   ],
   `getDNSObj`,
@@ -412,7 +426,7 @@ echo "{
       {
         \"type\": \"field\",
         \"network\": \"udp\",
-        \"port\": \"53\",
+        \"port\": 53,
         \"inboundTag\": [\"udp-in\"],
         \"outboundTag\": \"dns-out\"
       }$breakBqRuleObj`getRuleObj`
